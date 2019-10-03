@@ -1,4 +1,5 @@
 import 'package:http/http.dart' as http;
+import 'const.dart';
 
 String _extractCookie(String rawCookie){
   String _session = '';
@@ -124,7 +125,7 @@ class Authorize {
 
     Map<String, String> httpHeaders = {
       'Accept': 'text/html,application/xhtml+xml,application/xml',
-      'Referer': 'http://forum330.com/forum/',
+      'Referer': '$forumUrl/forum/',
       'Charset': 'utf-8',
       'Cookie': this.session
     };

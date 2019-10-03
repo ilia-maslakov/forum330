@@ -1,11 +1,15 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_image/network.dart';
 import 'bbcode.dart' as bbcode;
+import 'const.dart';
 
 final TextStyle bold = new TextStyle(fontWeight: FontWeight.bold);
 final TextStyle italic = new TextStyle(fontStyle: FontStyle.italic);
+final TextStyle code = new TextStyle(fontFamily: 'RobotoMono');
 final TextStyle strike = new TextStyle(decoration: TextDecoration.lineThrough);
-final TextStyle underline = new TextStyle(decoration: TextDecoration.underline);
-final TextStyle h1 = new TextStyle(height: 5, fontSize: 10);
+final TextStyle urlunderline = new TextStyle(decoration: TextDecoration.underline);
+final TextStyle quote = new TextStyle(backgroundColor: Colors.white54, fontStyle: FontStyle.italic);
+final TextStyle h1 = new TextStyle(height: 1.1, fontSize: 16, fontWeight: FontWeight.w500);
 
 
 class PostListTile extends StatelessWidget {
@@ -20,35 +24,82 @@ class PostListTile extends StatelessWidget {
     if (content.isNotEmpty){
       richString = new List<InlineSpan>();
       List<bbcode.Entity> parsedText = bbcode.Parser.parse(content);
-      print(content);
-      parsedText.forEach((p) {
+      //print(content);
+      parsedText?.forEach((p) {
+
+        TextStyle defStyle = new TextStyle(fontStyle: FontStyle.normal, fontWeight: FontWeight.normal);
         TextStyle curStyle = new TextStyle(fontStyle: FontStyle.normal, fontWeight: FontWeight.normal);
         if (p.value.isNotEmpty) {
+          String url = '';
+          String user = '';
           List<bbcode.Tags> tags = p.tagList;
+          if (p.attr != null) {
+            user = ' > ${p.attr['user']}: \n';
+          }
           print(p.value);
           bool isImage = false;
+          bool isQuote = false;
+
           tags.forEach((f) {
             print(f.toString());
             if (!isImage) {
-              if (f == bbcode.Tags.IMG) {
-                isImage = true;
-              } else if (f == bbcode.Tags.BOLD) {
-                curStyle = curStyle.merge(bold);
-              } else if (f == bbcode.Tags.ITALIC) {
-                curStyle = curStyle.merge(italic);
-              } else if (f == bbcode.Tags.HEADLINE) {
-                curStyle = curStyle.merge(h1);
-              } else if (f == bbcode.Tags.STRIKE) {
-                curStyle = curStyle.merge(strike);
+              switch (f) {
+                case bbcode.Tags.IMG: {
+                  isImage = true;
+                  break;
+                }
+                case bbcode.Tags.BOLD: {
+                  curStyle = curStyle.merge(bold);
+                  break;
+                }
+                case bbcode.Tags.ITALIC: {
+                  curStyle = curStyle.merge(italic);
+                  break;
+                }
+                case bbcode.Tags.HEADLINE: {
+                  curStyle = curStyle.merge(h1);
+                  break;
+                }
+                case bbcode.Tags.STRIKE: {
+                  curStyle = curStyle.merge(strike);
+                  break;
+                }
+                case bbcode.Tags.CODE: {
+                  curStyle = curStyle.merge(code);
+                  break;
+                }
+                case bbcode.Tags.URL: {
+                  curStyle = curStyle.merge(urlunderline);
+                  break;
+                }
+                case bbcode.Tags.NORMAL: {
+                  curStyle = defStyle.copyWith();
+                  break;
+                }
+                case bbcode.Tags.QUOTE: {
+                  isQuote = true;
+                  curStyle = curStyle.merge(quote).merge(italic);
+                  break;
+                }
+
               }
             }
           });
           if (isImage) {
             WidgetSpan e = new WidgetSpan(
-              child: Image.network(p.value)
+              child: Image(
+                image: new  NetworkImageWithRetry(addUrlPrefix(p.value))
+              )
             );
             richString.add(e);
           } else {
+            if (isQuote) {
+              TextSpan e = new TextSpan(
+                text: user,
+                style: defStyle.merge(bold).merge(italic)
+              );
+              richString.add(e);
+            }
             TextSpan e = new TextSpan(
               text: p.value,
               style: curStyle
@@ -58,7 +109,7 @@ class PostListTile extends StatelessWidget {
         }
       });
       if (richString.length == 0) {
-        richString.add(TextSpan(text: ""));
+        richString.add(TextSpan(text: ''));
       }
     }
   }
@@ -100,16 +151,17 @@ class PostListTile extends StatelessWidget {
             Row(
               children: <Widget>[
                 Expanded(
-                  flex: 2,
-
-                  child: RichText(
-                    text:
-                    TextSpan(
-                      style: DefaultTextStyle.of(context).style,
-                      children: richString
+                  flex: 6,
+                  child: Container(
+                    child: RichText(
+                      text: TextSpan(
+                        style: DefaultTextStyle.of(context).style,
+                        children: richString
+                      )
                     )
                   )
                 )
+
               ],
             ),
           ],
@@ -117,4 +169,13 @@ class PostListTile extends StatelessWidget {
       ),
     );
   }
+}
+
+String addUrlPrefix(String value) {
+  if(value.length > 0 && value[0] == '/') {
+    print('New img: $forumUrl$value');
+    return '$forumUrl$value';
+  }
+  print('img: $value');
+  return value;
 }

@@ -1,30 +1,20 @@
-import 'package:flutter/material.dart';
+import 'dart:convert';
+
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 
-import 'dart:convert';
-import 'postile.dart';
 import 'package:http/http.dart' as http;
+import 'package:indexed_list_view/indexed_list_view.dart';
 
 import 'main.dart';
+import 'postile.dart';
+import 'postmsg.dart';
+import 'const.dart';
 
 List<Post> cachedPosts;
 bool globalForceUpdatePosts = true;
-
-
-Future<Post> fetchPost() async {
-  final response =
-  await http.get('https://jsonplaceholder.typicode.com/posts/1');
-
-  if (response.statusCode == 200) {
-    // If the call to the server was successful, parse the JSON.
-    return null; //Post.fromJson(json.decode(response.body));
-  } else {
-    // If that call was not successful, throw an error.
-    throw Exception('Failed to load post');
-  }
-}
-
 
 class Post {
   String postId;
@@ -33,7 +23,6 @@ class Post {
   String content;
 
   Post(this.postId, this.userId, this.username, this.content);
-
 }
 
 final ThemeData iOSTheme = new ThemeData(
@@ -49,6 +38,8 @@ final ThemeData androidTheme = new ThemeData(
 
 final String defaultUserName = 'bob';
 
+
+
 class TopicPage extends StatefulWidget {
   TopicPage({Key key}) : super(key: key);
 
@@ -57,27 +48,57 @@ class TopicPage extends StatefulWidget {
 }
 
 class TopicWindow extends State<TopicPage> with TickerProviderStateMixin {
-  final List<Msg> _messages = <Msg>[];
-  final TextEditingController _textController = new TextEditingController();
-  bool _isWriting = false;
+
+  final TextEditingController msgTextController = new TextEditingController();
+  String topicId = '';
+  IndexedScrollController _controller;
+  Topic args;
+  int currentPage;
+  int maxPages;
+
+
+  _printLatestValue() {
+    print("text field: ${msgTextController.text}");
+  }
+
+  void initState() {
+    _controller = new IndexedScrollController();
+    msgTextController.addListener(_printLatestValue);
+    maxPages = 1;
+    currentPage = -1;
+    print('Topic page InitState()');
+    super.initState();
+  }
+
+
 
   @override
   Widget build(BuildContext context) {
-    Topic args = ModalRoute.of(context).settings.arguments;
+
+    args = ModalRoute.of(context).settings.arguments;
+    topicId = args.id;
+
+    maxPages = args.countPosts ~/ 100 + 1;
+    print('max pages: $maxPages');
+    if (maxPages < 1) {
+      maxPages = 1;
+    }
+    if (currentPage < 0) {
+      currentPage = args.lastRead ~/ 100 + 1;
+    }
+
     print('ModalRoute.of(context).settings.arguments: ${args.id}');
     var futureBuilder = new FutureBuilder<List<Post>>(
-      future: _getPosts(args.id, 1, globalForceUpdatePosts),
-      builder: (BuildContext ctx, AsyncSnapshot snapshot){
+      future: _getPosts(args.id),
+      builder: (BuildContext ctx, AsyncSnapshot snapshot) {
         switch (snapshot.connectionState) {
           case ConnectionState.none:
             return new Text('Press button to start.');
           case ConnectionState.active:
           case ConnectionState.waiting:
-          {
-            return new Center(
-              child: CircularProgressIndicator()
-            );
-          }
+            {
+              return new Center(child: CircularProgressIndicator());
+            }
           case ConnectionState.done:
             if (snapshot.hasError) {
               return new Text('Error: ${snapshot.error}');
@@ -88,60 +109,109 @@ class TopicWindow extends State<TopicPage> with TickerProviderStateMixin {
       },
     );
 
+    int unread = args.countPosts - args.lastRead;
+
     return new Scaffold(
       appBar: new AppBar(
-        title: new Text(args.title),
-      ),
-      body: WillPopScope(
-        child: Stack(
-          children: <Widget>[
-            new Column(
-              children: <Widget>[
-                new Flexible(
-                  child: futureBuilder
-                ),
-                new Divider(height: 1.0),
-                new Container(
-                  child: _buildComposer(),
-                  decoration: new BoxDecoration(
-                    color: Theme.of(context).cardColor
-                  )
-                )
-              ]
-            )
-          ]
+        title: Padding(
+          padding: const EdgeInsets.only(bottom: 0.0),
+          child: ListTile(
+            isThreeLine: false,
+            title: Text(args.title, style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white)),
+            subtitle: Text('Сообщений: ${args.countPosts} новых: $unread', style: TextStyle(color: Colors.white))
+          ),
         )
-      )
+      ),
+      body: new Column(children: <Widget>[
+        new Flexible(child: futureBuilder),
+        new Divider(height: 1.0),
+        new Container(child: _buildComposer(), decoration: new BoxDecoration(color: Theme.of(context).cardColor))
+      ]),
+      floatingActionButton: Padding(
+        padding: const EdgeInsets.fromLTRB(20, 0, 0, 40),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.end,
+          children: <Widget>[
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: <Widget>[
+                FloatingActionButton(
+                  heroTag: 'rewind',
+                  backgroundColor: Colors.blue,
+                  mini: true,
+                  child: Icon(
+                    Icons.fast_rewind,
+                    color: Colors.white,
+                  ),
+                  onPressed: () {
+                    currentPage = 1;
+                    setState(() {
+                      print('currentPage: $currentPage');
+                      globalForceUpdatePosts = true;
+                      //_getPosts(true);
+                      print('Pressed rewind');
+                    });
+                  },
+                ),
+                FloatingActionButton(
+                  backgroundColor: Colors.blue,
+                  heroTag: 'forward',
+                  mini: true,
+                  child: Icon(
+                    Icons.fast_forward,
+                    color: Colors.white,
+                  ),
+                  onPressed: () {
+                    currentPage = maxPages;
+                    setState(() {
+                      print('currentPage: $currentPage');
+                      globalForceUpdatePosts = true;
+                      //_getPosts(true);
+                      print('Pressed forward');
+                      _controller.animateToIndexAndOffset(index: cachedPosts.length - 1, offset: -250);
+                    }
+                    );
+                  },
+                ),
+              ],
+            ),
+            FloatingActionButton(
+              heroTag: 'end',
+              mini: true,
+              backgroundColor: Colors.white,
+              onPressed: () {
+                _controller.animateToIndexAndOffset(index: cachedPosts.length - 1, offset: -250);
+              },
+              child: Icon(Icons.keyboard_arrow_down, color: Colors.black),
+            ),
+          ],
+        ),
+      ),
     );
   }
 
-  Future <List<Post>> _getPosts(String topicId, int startFrom, bool forcedUpdate) async {
- 
-    globalForceUpdatePosts = forcedUpdate;
+  Future<List<Post>> _getPosts(String topicId) async {
     if (!authorizeData.isAuthenticated()) {
       return null;
     }
     if (cachedPosts == null) {
       cachedPosts = new List<Post>();
     }
-    int topicPage = 1;
-    //String topicUrl = '${authorizeData.mainUrl}/?p=conversations/index.json&userId=${authorizeData.userId}&token=${authorizeData.token}';
-    String topicUrl = '${authorizeData.mainUrl}/?p=conversation/index.json/$topicId/p$topicPage&userId=${authorizeData.userId}&token=${authorizeData.token}';
+
+    String topicUrl = '${authorizeData.mainUrl}/?p=conversation/index.json/$topicId/p$currentPage&userId=${authorizeData.userId}&token=${authorizeData.token}';
 
     //topicUrl = '$mainUrl/member/me';
     //&search=%23%D0%BB%D0%B8%D0%BC%D0%B8%D1%82%3A${topicCount.toString()}
     var _url = topicUrl;
 
     print('get posts');
+    print('   p = $currentPage');
     print('   token: ${authorizeData.token}');
     print('   session: ${authorizeData.session}');
     print('   userId: ${authorizeData.userId}');
-    print('   main url: ${authorizeData.mainUrl}');
+    print('   url: $topicUrl');
 
-    Map<String, String> httpHeaders = {
-      'Referer': 'http://forum330.com/forum/',
-      'Cookie': authorizeData.session
-    };
+    Map<String, String> httpHeaders = {'Referer': '$forumUrl/forum/', 'Cookie': authorizeData.session};
     if (!globalForceUpdatePosts && cachedPosts != null) {
       print(' return cached content ');
       globalForceUpdatePosts = false;
@@ -169,30 +239,33 @@ class TopicWindow extends State<TopicPage> with TickerProviderStateMixin {
     return cachedPosts;
   }
 
-  Widget _messageList(BuildContext ctx, AsyncSnapshot snapshot) {
-
-    return new ListView.builder(
-      itemCount: cachedPosts.length,
-      reverse: false,
-      padding: new EdgeInsets.all(6.0),
-      itemBuilder: (context, index) {
-        return new PostListTile(
+  Function messageItemBuilder() {
+    return (BuildContext context, int index) {
+      if (index < cachedPosts.length && index >= 0) {
+        return PostListTile(
           cachedPosts[index].postId,
           cachedPosts[index].userId,
           cachedPosts[index].username,
           cachedPosts[index].content
         );
+      } else {
+        return null;
       }
-    );
-/*
-    return new ListView.builder(
-      itemBuilder: (_, int index) => _messages[index],
-      itemCount: _messages.length,
-      reverse: true,
+    };
+  }
+
+  Widget _messageList(BuildContext context, AsyncSnapshot snapshot) {
+    IndexedListView _tilelist = new IndexedListView.builder(
+
+      //itemCount: cachedPosts.length,
+      maxItemCount: cachedPosts.length,
+      controller: _controller,
+      reverse: false,
       padding: new EdgeInsets.all(6.0),
+      itemBuilder: messageItemBuilder()
     );
 
- */
+    return _tilelist;
   }
 
   Widget _buildComposer() {
@@ -204,83 +277,54 @@ class TopicWindow extends State<TopicPage> with TickerProviderStateMixin {
           children: <Widget>[
             new Flexible(
               child: new TextField(
-                controller: _textController,
-                onChanged: (String txt) {
-                  /*
-                  setState(() {
-                    _isWriting = txt.length > 0;
-                  });
-
-                   */
-                },
+                controller: msgTextController,
+                minLines: 1,
+                maxLines: 8,
                 onSubmitted: _submitMsg,
                 decoration: new InputDecoration.collapsed(hintText: "Сообщение"),
               ),
             ),
             new Container(
-              margin: new EdgeInsets.symmetric(horizontal: 3.0),
-              child: Theme.of(context).platform == TargetPlatform.iOS
-                ? new CupertinoButton(
-                child: new Text("Submit"),
-                onPressed: _isWriting ? () => _submitMsg(_textController.text)
-                  : null
-              )
-                : new IconButton(
+              margin: new EdgeInsets.symmetric(horizontal: 3),
+              child: new IconButton(
                 icon: new Icon(Icons.send),
-                onPressed: _isWriting
-                  ? () => _submitMsg(_textController.text)
-                  : null,
+                onPressed: () => _submitMsg(msgTextController.text),
               )
             ),
           ],
         ),
-        decoration: Theme.of(context).platform == TargetPlatform.iOS
-          ? new BoxDecoration(
-          border:
-          new Border(top: new BorderSide(color: Colors.brown))) :
-        null
       ),
     );
   }
-
-  void _submitMsg(String txt) {
-    _textController.clear();
-    setState(() {
-      _isWriting = false;
-    });
-    Msg msg = new Msg(
-      txt: txt,
-      animationController: new AnimationController(
-        vsync: this,
-        duration: new Duration(milliseconds: 800)
-      ),
-    );
-    setState(() {
-      _messages.insert(0, msg);
-    });
-    msg.animationController.forward();
+  void _submitMsg(String txt) async {
+    msgTextController.clear();
+    var pmsg = new SendMessage(txt, topicId);
+    int res = await pmsg.sendPostMessage();
+    if (res == 200) {
+      globalForceUpdatePosts = true;
+      setState(() {
+        print('Try send $txt');
+      });
+    }
   }
 
   @override
   void dispose() {
-    for (Msg msg in _messages) {
-      msg.animationController.dispose();
-    }
+    msgTextController.dispose();
     super.dispose();
   }
-
 }
 
 class Msg extends StatelessWidget {
   Msg({this.txt, this.animationController});
+
   final String txt;
   final AnimationController animationController;
 
   @override
   Widget build(BuildContext ctx) {
     return new SizeTransition(
-      sizeFactor: new CurvedAnimation(
-        parent: animationController, curve: Curves.easeOut),
+      sizeFactor: new CurvedAnimation(parent: animationController, curve: Curves.easeOut),
       axisAlignment: 0.0,
       child: new Container(
         margin: const EdgeInsets.symmetric(vertical: 8.0),

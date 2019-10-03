@@ -7,11 +7,13 @@ import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:http/http.dart' as http;
 
-import 'bbcode.dart' as bbcode;
 import 'drawer.dart';
 import 'authorize.dart';
 import 'login.dart';
 import 'topic.dart';
+
+import 'bbcode.dart' as bbcode;
+
 
 String appBarTitle = 'Форум 330';
 
@@ -21,8 +23,9 @@ class Topic {
   String id;
   String title;
   String lastUser;
-
-  Topic(this.id, this.title, this.lastUser);
+  int lastRead;
+  int countPosts;
+  Topic(this.id, this.title, this.lastUser, this.lastRead, this.countPosts);
 }
 
 bool globalForceUpdate = true;
@@ -39,14 +42,6 @@ final ThemeData androidTheme = new ThemeData(
   primarySwatch: Colors.blue,
   accentColor: Colors.green,
 );
-
-void checkBBCode(){
-  var test="e[b]ss[/b]r[url=http://werterwt.rwe/3243423][b]fdhfdhgfdhgfdhd[/b][/url][quote=:@wewrew][h]eyter[i]werterw[b]erwterwter[/b]ewtew[/i][/h]werterwtewrtrew[/quote]    [quote=1234321-2134213:@wewrew]1111111111111111[/quote] [quote]22222222222222222[/quote]";
-  var res = bbcode.Parser.parse(test);
-  res.forEach((f){
-    print(f.value);
-  });
-}
 
 void main() => runApp(
   new MaterialApp(
@@ -72,7 +67,10 @@ class Forum extends StatefulWidget {
 class ForumWindow extends State<Forum> with TickerProviderStateMixin {
 
   @override
-  Widget build(BuildContext ctx) {
+  Widget build(BuildContext context) {
+    //var test1 = 'https://wwww.youtube.com/4tfyuhgjhgj';
+    //var t = bbcode.Parser.parse(test1);
+    //print(t);
     var futureBuilder = new FutureBuilder(
       future: _getTopics(globalForceUpdate),
       builder: (BuildContext context, AsyncSnapshot snapshot){
@@ -91,7 +89,6 @@ class ForumWindow extends State<Forum> with TickerProviderStateMixin {
             if (snapshot.hasError) {
               return new Text('Error: ${snapshot.error}');
             } else {
-
               return createListView(context, snapshot);
             }
         }
@@ -99,13 +96,6 @@ class ForumWindow extends State<Forum> with TickerProviderStateMixin {
         return null;
       },
     );
-
-
-
-
-    setState(() {
-      appBarTitle = 'Форум 330';
-    });
 
     return new Scaffold(
       drawer: Drawer(
@@ -149,7 +139,6 @@ class ForumWindow extends State<Forum> with TickerProviderStateMixin {
         onPressed: () {
           globalForceUpdate = true;
           setState(() {
-            checkBBCode();
             _getTopics(true);
             print('Pressed UPDATE button');
           });
@@ -232,7 +221,15 @@ class ForumWindow extends State<Forum> with TickerProviderStateMixin {
       if (res != null) {
         print('Count topcs: ${res.length}');
         for (var x = 0; x < res.length; x++) {
-          values.add(Topic(res[x]['conversationId'], res[x]['title'], res[x]['lastPostMember']));
+          values.add(
+            Topic(
+              res[x]['conversationId'],
+              res[x]['title'],
+              res[x]['lastPostMember'],
+              int.parse(res[x]['lastRead'] ?? '0'),
+              int.parse(res[x]['countPosts'] ?? '0')
+            )
+          );
         }
       }
     }).catchError((error) {
