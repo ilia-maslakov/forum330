@@ -40,7 +40,9 @@ class Parser {
         user = partstr.substring(1, partstr.length);
       } else if (pos > 0) {
         url = partstr.substring(0, pos);
-        user = partstr.substring(pos + 2, partstr.length);
+        if ((pos + 2) < partstr.length) {
+          user = partstr.substring(pos + 2, partstr.length);
+        }
       }
     } else if (tag == Tags.URL) {
       url = text.substring(5, text.length - 1);

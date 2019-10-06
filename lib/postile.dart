@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter_image/network.dart';
+import 'youtube.dart';
 import 'bbcode.dart' as bbcode;
+import 'package:url_launcher/url_launcher.dart';
 import 'const.dart';
 
 final TextStyle bold = new TextStyle(fontWeight: FontWeight.bold);
@@ -17,21 +20,24 @@ class PostListTile extends StatelessWidget {
   final String userId;
   final String username;
   final String content;
+  final TextStyle defStyle = new TextStyle(fontSize: 16, fontStyle: FontStyle.normal, fontWeight: FontWeight.normal, color: Colors.black);
   List<InlineSpan> richString;
-  //List<WidgetSpan> richImages;
+  List<Container> paragraphList;
+  YouTube youTube = new YouTube();
 
   PostListTile(this.postId, this.userId, this.username, this.content){
     if (content.isNotEmpty){
       richString = new List<InlineSpan>();
+      paragraphList = new List<Container>();
       List<bbcode.Entity> parsedText = bbcode.Parser.parse(content);
       //print(content);
       parsedText?.forEach((p) {
 
-        TextStyle defStyle = new TextStyle(fontStyle: FontStyle.normal, fontWeight: FontWeight.normal);
         TextStyle curStyle = new TextStyle(fontStyle: FontStyle.normal, fontWeight: FontWeight.normal);
         if (p.value.isNotEmpty) {
           String url = '';
           String user = '';
+          String youTubeId = '';
           List<bbcode.Tags> tags = p.tagList;
           if (p.attr != null) {
             user = ' > ${p.attr['user']}: \n';
@@ -39,6 +45,9 @@ class PostListTile extends StatelessWidget {
           print(p.value);
           bool isImage = false;
           bool isQuote = false;
+          bool isYouTube = false;
+          String youTubeThumbnail = '';
+          String youTubeUrl = '';
 
           tags.forEach((f) {
             print(f.toString());
@@ -69,6 +78,15 @@ class PostListTile extends StatelessWidget {
                   break;
                 }
                 case bbcode.Tags.URL: {
+
+                  youTubeId = youTube.extractYouTubeIdFromUrl(p.value);
+                  if (youTubeId.length > 0) {
+                    isYouTube = true;
+                    youTubeThumbnail = 'https://i.ytimg.com/vi/$youTubeId/sddefault.jpg';
+                    youTubeUrl = 'https://youtu.be/$youTubeId';
+                    p.attr = {'videoId': youTubeId, 'thumbnail': youTubeThumbnail};
+                  }
+
                   curStyle = curStyle.merge(urlunderline);
                   break;
                 }
@@ -88,12 +106,40 @@ class PostListTile extends StatelessWidget {
           if (isImage) {
             WidgetSpan e = new WidgetSpan(
               child: Image(
-                image: new  NetworkImageWithRetry(addUrlPrefix(p.value))
+                image: new NetworkImageWithRetry(addUrlPrefix(p.value))
               )
+            );
+            richString.add(e);
+          } else if (isYouTube) {
+            WidgetSpan e = new WidgetSpan(
+              child: Stack(
+                alignment: Alignment.center,
+                children: <Widget>[
+                  Image(width: 360.0, image: new NetworkImageWithRetry(youTubeThumbnail)),
+                  Container(
+                    child: FlatButton(
+                      shape: new RoundedRectangleBorder(
+                        borderRadius: new BorderRadius.circular(9.0),
+                      ),
+                      onPressed: () {
+                        launch(youTubeUrl);
+                      },
+                      color: Color.fromARGB(190, 250, 4, 4),
+                      child: Icon(Icons.play_arrow, color: Colors.white, size:44)
+                    )
+                  )
+                ],
+              ),
             );
             richString.add(e);
           } else {
             if (isQuote) {
+/*
+              if (richString.length > 0) {
+                paragraphList.add(Container(child: RichText(text: TextSpan(style: defStyle, children: richString))));
+                richString.clear();
+              }
+ */
               TextSpan e = new TextSpan(
                 text: user,
                 style: defStyle.merge(bold).merge(italic)
@@ -111,11 +157,37 @@ class PostListTile extends StatelessWidget {
       if (richString.length == 0) {
         richString.add(TextSpan(text: ''));
       }
+      paragraphList.add(Container(child: RichText(text: TextSpan(style: defStyle, children: richString))));
+
     }
+
   }
 
   @override
   Widget build(BuildContext context) {
+
+    /*
+    var futureBuilder = new FutureBuilder<Map<String, String>>(
+      future: youTube.getDescription(''),
+      builder: (BuildContext context, AsyncSnapshot snapshot) {
+        switch (snapshot.connectionState) {
+          case ConnectionState.none:
+            return new Text('Press button to start.');
+          case ConnectionState.active:
+          case ConnectionState.waiting:
+            {
+              return new Center(child: CircularProgressIndicator());
+            }
+          case ConnectionState.done:
+            if (snapshot.hasError) {
+              return new Text('Error: ${snapshot.error}');
+            }
+            return _messageList(context, snapshot);
+        }
+        return null;
+      },
+    );
+     */
 
     return Container(
       color: Colors.white30,
@@ -148,21 +220,10 @@ class PostListTile extends StatelessWidget {
                 ],
               ),
             ),
-            Row(
-              children: <Widget>[
-                Expanded(
-                  flex: 6,
-                  child: Container(
-                    child: RichText(
-                      text: TextSpan(
-                        style: DefaultTextStyle.of(context).style,
-                        children: richString
-                      )
-                    )
-                  )
-                )
-
-              ],
+            Column(
+              mainAxisSize: MainAxisSize.max,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: paragraphList
             ),
           ],
         )

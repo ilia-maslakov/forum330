@@ -90,7 +90,7 @@ class TopicWindow extends State<TopicPage> with TickerProviderStateMixin {
     print('ModalRoute.of(context).settings.arguments: ${args.id}');
     var futureBuilder = new FutureBuilder<List<Post>>(
       future: _getPosts(args.id),
-      builder: (BuildContext ctx, AsyncSnapshot snapshot) {
+      builder: (BuildContext context, AsyncSnapshot snapshot) {
         switch (snapshot.connectionState) {
           case ConnectionState.none:
             return new Text('Press button to start.');
@@ -241,7 +241,7 @@ class TopicWindow extends State<TopicPage> with TickerProviderStateMixin {
 
   Function messageItemBuilder() {
     return (BuildContext context, int index) {
-      if (index < cachedPosts.length && index >= 0) {
+      if (index < (cachedPosts?.length ?? 99) && index >= 0) {
         return PostListTile(
           cachedPosts[index].postId,
           cachedPosts[index].userId,
